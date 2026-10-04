@@ -49,7 +49,7 @@ Each feature is its own Nest module. Controllers only handle HTTP; logic sits in
 
 ### Decisions worth knowing
 
-- **Gemini with a fallback.** Main model `gemini-3.5-flash`, backup `gemini-3.5-flash-lite`, both set in `.env`. Each gets one short attempt with SDK retries off (6 s for text, 15 s for photos, 8 s for insights), so the app's own timeout is never hit while the SDK quietly retries for a minute. The backup exists because the main model returns 503 "high demand" at busy times.
+- **Gemini with a fallback.** Main model `gemini-3.5-flash-lite`, backup `gemini-3.5-flash`, both set in `.env`. Each gets one short attempt with SDK retries off (6 s for text, 15 s for photos, 8 s for insights), so the app's own timeout is never hit while the SDK quietly retries for a minute. Lite is the main model because the free tier allows only 20 requests a day on `gemini-3.5-flash`; flash is the backup for when lite is busy (Google returns 503 "high demand" at peaks).
 - **Never trust the model's output.** Gemini is asked for JSON matching a schema, and the service still validates it with zod. If it's malformed, the service tries once more, then returns a clean 502.
 - **Facts, not numbers, for insights.** The insight endpoint turns the summary into plain sentences ("Protein target reached on 0 of 6 logged days") before asking Gemini, and the prompt forbids claiming a target was met unless the facts say so. Early versions misread raw numbers and praised a user who had missed protein every day.
 - **Rate limits.** 20 requests a minute per IP for parsing and 10 for insights, so a demo can't burn the Gemini free tier. Sync allows 120, since it's frequent and costs no AI quota.
@@ -75,8 +75,8 @@ npm run start:dev           # http://localhost:3000, reloads on code changes (no
 | `DATABASE_URL` | Pooled connection string (Supabase: Connect → Transaction pooler, port 6543, add `?pgbouncer=true`) |
 | `DIRECT_URL` | Direct or session connection (port 5432), for migrations |
 | `GEMINI_API_KEY` | From Google AI Studio |
-| `GEMINI_MODEL` | Optional, default `gemini-3.5-flash` |
-| `GEMINI_FALLBACK_MODEL` | Optional, default `gemini-3.5-flash-lite` |
+| `GEMINI_MODEL` | Optional, default `gemini-3.5-flash-lite` |
+| `GEMINI_FALLBACK_MODEL` | Optional, default `gemini-3.5-flash` |
 | `PORT` | Optional, default `3000` |
 
 The server starts without a Gemini key. Only the AI endpoints fail, with a clear 502 explaining the key is missing.

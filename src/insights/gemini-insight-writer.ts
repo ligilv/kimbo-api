@@ -13,8 +13,8 @@ export interface InsightWriter {
   write(summary: InsightRequest): Promise<string>;
 }
 
-const DEFAULT_MODEL = 'gemini-3.5-flash';
-const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash';
 const ATTEMPT = { timeout: 8_000, maxRetries: 0 };
 const MAX_LENGTH = 400;
 

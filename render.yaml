@@ -1,0 +1,22 @@
+# One-click deploy on Render (Dashboard → New → Blueprint → pick this repo).
+# Secrets are entered in the dashboard when prompted, never committed.
+services:
+  - type: web
+    name: kimbo-api
+    runtime: node
+    plan: free # sleeps after 15 min idle; the app pings / on launch to wake it
+    region: singapore # nearest to India
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /
+    envVars:
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_FALLBACK_MODEL
+        value: gemini-3.5-flash
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

@@ -8,8 +8,8 @@ import { mealParseJsonSchema, type ParseMealRequest } from './meal.schema.js';
 // Models: https://ai.google.dev/gemini-api/docs/models
 // Main model, plus a lighter backup used when the main one is overloaded or
 // failing (Google returns 503 "high demand" during spikes). Both overridable in .env.
-const DEFAULT_MODEL = 'gemini-3.5-flash';
-const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash';
 
 // Each attempt gets one quick try, no SDK retries, so main + backup together
 // finish inside the app's 15 s wait instead of the SDK retrying for a minute.
