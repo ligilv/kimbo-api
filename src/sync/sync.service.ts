@@ -81,6 +81,12 @@ export class SyncService {
     await this.prisma.mealLog.deleteMany({ where: { id, userId } });
   }
 
+  // The schema cascades from users to profiles, meals and items.
+  // deleteMany: deleting an unknown device is a no-op, so retries are safe.
+  async deleteUser(userId: string): Promise<void> {
+    await this.prisma.user.deleteMany({ where: { id: userId } });
+  }
+
   async listMeals(
     userId: string,
     { from, to }: MealRange,

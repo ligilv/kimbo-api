@@ -9,7 +9,7 @@ import { SyncModule } from './sync.module.js';
 const DEVICE = 'device_abc-123';
 
 const prisma = {
-  user: { upsert: vi.fn() },
+  user: { upsert: vi.fn(), deleteMany: vi.fn() },
   profile: { upsert: vi.fn() },
   mealLog: {
     findUnique: vi.fn(),
@@ -242,6 +242,20 @@ describe('SyncController', () => {
       expect(prisma.mealLog.deleteMany).toHaveBeenCalledWith({
         where: { id: 'meal-1', userId: DEVICE },
       });
+    });
+  });
+
+  describe('DELETE /me', () => {
+    it("deletes only this device's user (profile and meals cascade), 204", async () => {
+      await http().delete('/me').set('x-device-id', DEVICE).expect(204);
+      expect(prisma.user.deleteMany).toHaveBeenCalledWith({
+        where: { id: DEVICE },
+      });
+    });
+
+    it('400s without a device id', async () => {
+      await http().delete('/me').expect(400);
+      expect(prisma.user.deleteMany).not.toHaveBeenCalled();
     });
   });
 

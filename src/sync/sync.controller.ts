@@ -61,6 +61,13 @@ export class SyncController {
     return this.sync.putMeal(deviceId, id, body);
   }
 
+  // Reset in the app: removes this device's profile and meals (cascade).
+  @Delete('me')
+  @HttpCode(204)
+  deleteMe(@DeviceId() deviceId: string): Promise<void> {
+    return this.sync.deleteUser(deviceId);
+  }
+
   @Delete('meals/:id')
   @HttpCode(204)
   deleteMeal(
