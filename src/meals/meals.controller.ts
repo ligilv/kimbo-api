@@ -18,6 +18,6 @@ export class MealsController {
   parse(
     @Body(new ZodValidationPipe(parseMealRequestSchema)) body: ParseMealRequest,
   ): Promise<MealParseResult> {
-    return this.meals.parse(body.text);
+    return this.meals.parse(body);
   }
 }

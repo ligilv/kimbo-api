@@ -1,12 +1,41 @@
 import { z } from 'zod';
 
-export const parseMealRequestSchema = z.object({
-  text: z
-    .string({ error: 'text must be a string' })
-    .trim()
-    .min(1, 'text must not be empty')
-    .max(500, 'text must be at most 500 characters'),
-});
+// ~4 MB of base64 ≈ 3 MB image. The app sends ~1024px JPEGs (100–400 KB).
+export const MAX_IMAGE_BASE64_LENGTH = 4 * 1024 * 1024;
+
+export const parseMealRequestSchema = z
+  .object({
+    text: z
+      .string({ error: 'text must be a string' })
+      .trim()
+      .max(500, 'text must be at most 500 characters')
+      .optional(),
+    image: z
+      .object(
+        {
+          base64: z
+            .string({ error: 'image.base64 must be a string' })
+            .min(1, 'image.base64 must not be empty')
+            .max(
+              MAX_IMAGE_BASE64_LENGTH,
+              'image is too large (max ~3 MB); please send a smaller photo',
+            )
+            .regex(
+              /^[A-Za-z0-9+/]+={0,2}$/,
+              'image.base64 must be plain base64 (no data: prefix)',
+            ),
+          mimeType: z.enum(['image/jpeg', 'image/png'], {
+            error: "image.mimeType must be 'image/jpeg' or 'image/png'",
+          }),
+        },
+        { error: 'image must be an object' },
+      )
+      .optional(),
+  })
+  .refine((body) => body.image || body.text, {
+    message: 'text must not be empty (or send an image)',
+    path: ['text'],
+  });
 export type ParseMealRequest = z.infer<typeof parseMealRequestSchema>;
 
 const mealItemSchema = z.object({

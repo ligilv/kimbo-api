@@ -1,12 +1,12 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { MEAL_ANALYZER } from './meal-analyzer.js';
+import { MEAL_ANALYZER, type MealAnalyzer } from './meal-analyzer.js';
 import { MealsModule } from './meals.module.js';
 
 describe('POST /meals/parse', () => {
   let app: INestApplication;
-  const analyze = vi.fn<(text: string) => Promise<string>>();
+  const analyze = vi.fn<MealAnalyzer['analyze']>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [MealsModule] })
@@ -39,13 +39,28 @@ describe('POST /meals/parse', () => {
       .post('/meals/parse')
       .send({ text: ' 3 idlis ' })
       .expect(200, body);
-    expect(analyze).toHaveBeenCalledWith('3 idlis');
+    expect(analyze).toHaveBeenCalledWith({ text: '3 idlis' });
   });
 
-  it('returns 400 for an invalid body', async () => {
+  it('passes an image request through', async () => {
+    const body = { items: [], clarification: 'Could you retake the photo?' };
+    analyze.mockResolvedValueOnce(JSON.stringify(body));
+    const image = { base64: 'aGVsbG8=', mimeType: 'image/jpeg' };
     await request(app.getHttpServer())
       .post('/meals/parse')
-      .send({ text: '' })
+      .send({ image })
+      .expect(200, body);
+    expect(analyze).toHaveBeenLastCalledWith({ image });
+  });
+
+  it.each([
+    [{ text: '' }],
+    [{}],
+    [{ image: { base64: 'aGVsbG8=', mimeType: 'image/webp' } }],
+  ])('returns 400 for %j', async (payload) => {
+    await request(app.getHttpServer())
+      .post('/meals/parse')
+      .send(payload)
       .expect(400);
   });
 });

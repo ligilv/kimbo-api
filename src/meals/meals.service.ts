@@ -6,7 +6,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { MEAL_ANALYZER, type MealAnalyzer } from './meal-analyzer.js';
-import { mealParseResultSchema, type MealParseResult } from './meal.schema.js';
+import {
+  mealParseResultSchema,
+  type MealParseResult,
+  type ParseMealRequest,
+} from './meal.schema.js';
 
 const MAX_ATTEMPTS = 2; // first try + one retry on invalid output
 
@@ -16,9 +20,9 @@ export class MealsService {
 
   constructor(@Inject(MEAL_ANALYZER) private readonly analyzer: MealAnalyzer) {}
 
-  async parse(text: string): Promise<MealParseResult> {
+  async parse(meal: ParseMealRequest): Promise<MealParseResult> {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const raw = await this.callAnalyzer(text);
+      const raw = await this.callAnalyzer(meal);
       const result = mealParseResultSchema.safeParse(safeJsonParse(raw));
       if (result.success) return result.data;
       this.logger.warn(
@@ -30,9 +34,9 @@ export class MealsService {
     );
   }
 
-  private async callAnalyzer(text: string): Promise<string> {
+  private async callAnalyzer(meal: ParseMealRequest): Promise<string> {
     try {
-      return await this.analyzer.analyze(text);
+      return await this.analyzer.analyze(meal);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       this.logger.error(

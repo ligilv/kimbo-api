@@ -26,7 +26,9 @@ describe('GeminiMealAnalyzer', () => {
 
   it('uses the main model when it answers', async () => {
     create.mockResolvedValueOnce({ output_text: '{"ok":1}' });
-    await expect(new GeminiMealAnalyzer(configWith(env)).analyze('rice')).resolves.toBe('{"ok":1}');
+    await expect(
+      new GeminiMealAnalyzer(configWith(env)).analyze({ text: 'rice' }),
+    ).resolves.toBe('{"ok":1}');
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].model).toBe('main-model');
     // One quick attempt, no SDK retries.
@@ -37,19 +39,76 @@ describe('GeminiMealAnalyzer', () => {
     create
       .mockRejectedValueOnce(new Error('503 high demand'))
       .mockResolvedValueOnce({ output_text: '{"ok":2}' });
-    await expect(new GeminiMealAnalyzer(configWith(env)).analyze('rice')).resolves.toBe('{"ok":2}');
-    expect(create.mock.calls.map(call => call[0].model)).toEqual(['main-model', 'backup-model']);
+    await expect(
+      new GeminiMealAnalyzer(configWith(env)).analyze({ text: 'rice' }),
+    ).resolves.toBe('{"ok":2}');
+    expect(create.mock.calls.map((call) => call[0].model)).toEqual([
+      'main-model',
+      'backup-model',
+    ]);
   });
 
   it('gives up when both models fail', async () => {
-    create.mockImplementation(() => Promise.reject(new Error('503 high demand')));
-    await expect(new GeminiMealAnalyzer(configWith(env)).analyze('rice')).rejects.toThrow('503');
+    create.mockImplementation(() =>
+      Promise.reject(new Error('503 high demand')),
+    );
+    await expect(
+      new GeminiMealAnalyzer(configWith(env)).analyze({ text: 'rice' }),
+    ).rejects.toThrow('503');
     expect(create).toHaveBeenCalledTimes(2);
   });
 
   it('does not try the backup when the key is missing', async () => {
-    const analyzer = new GeminiMealAnalyzer(configWith({ GEMINI_MODEL: 'main-model' }));
-    await expect(analyzer.analyze('rice')).rejects.toBeInstanceOf(BadGatewayException);
+    const analyzer = new GeminiMealAnalyzer(
+      configWith({ GEMINI_MODEL: 'main-model' }),
+    );
+    await expect(analyzer.analyze({ text: 'rice' })).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
     expect(create).not.toHaveBeenCalled();
+  });
+
+  const photo = { base64: 'aGVsbG8=', mimeType: 'image/jpeg' as const };
+
+  it('sends the photo and note as multimodal input with the longer timeout', async () => {
+    create.mockResolvedValueOnce({ output_text: '{"ok":3}' });
+    await expect(
+      new GeminiMealAnalyzer(configWith(env)).analyze({
+        text: 'no ghee',
+        image: photo,
+      }),
+    ).resolves.toBe('{"ok":3}');
+    expect(create.mock.calls[0][0].input).toEqual([
+      { type: 'text', text: "User's note: no ghee" },
+      { type: 'image', data: 'aGVsbG8=', mime_type: 'image/jpeg' },
+    ]);
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 15000, maxRetries: 0 });
+  });
+
+  it('sends an image-only request with a default instruction', async () => {
+    create.mockResolvedValueOnce({ output_text: '{}' });
+    await new GeminiMealAnalyzer(configWith(env)).analyze({
+      text: '',
+      image: photo,
+    });
+    expect(create.mock.calls[0][0].input[0]).toEqual({
+      type: 'text',
+      text: 'Estimate the food in this photo.',
+    });
+  });
+
+  it('falls back to the backup model for photos too', async () => {
+    create
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ output_text: '{"ok":4}' });
+    await expect(
+      new GeminiMealAnalyzer(configWith(env)).analyze({ image: photo }),
+    ).resolves.toBe('{"ok":4}');
+    expect(
+      create.mock.calls.map((call) => [call[0].model, call[1].timeout]),
+    ).toEqual([
+      ['main-model', 15000],
+      ['backup-model', 15000],
+    ]);
   });
 });
