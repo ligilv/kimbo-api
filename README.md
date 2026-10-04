@@ -1,124 +1,104 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Kimbo API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The backend for [Kimbo](https://github.com/ligilv/Kimbo-app), a chat-style calorie and protein tracker. It does three jobs:
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+1. **Understands meals.** Text ("2 chapati and dal") and/or a photo go in; structured food items with calories and macros come out, via Google Gemini.
+2. **Backs up the user's data.** The phone is the main copy; it sends its profile and meals here in the background, stored in Postgres (Supabase).
+3. **Writes Kimbo's take.** A short, personal insight from a 7- or 30-day summary.
 
-## Description
+The Gemini key lives only here, never in the app.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Built with NestJS 12 (ESM), Prisma 7 + PostgreSQL, zod for validation, `@google/genai`, and Vitest.
 
-## Project setup
+## Endpoints
 
-```bash
-$ npm install
+Every request is JSON. Sync endpoints need an `x-device-id` header (8–64 chars of `A-Za-z0-9_-`): there are no accounts, so each install has a random id that keeps phones apart. It is not authentication.
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/meals/parse` | `{ text?, image?: { base64, mimeType } }` → `{ items: [...], clarification: string \| null }`. If the meal is too vague, `items` is empty and `clarification` is one question to ask the user. |
+| `POST` | `/insights` | A summary the app works out (averages, days on target, kcal per meal slot, top food names; no raw meal text) → `{ insight }`, two short sentences. |
+| `PUT` | `/profile` | Create or replace this device's profile (onboarding answers). |
+| `PUT` | `/meals/:id` | Create or replace one meal and its items. Last write wins by the app's `updatedAt`, so an offline queue replaying out of order can't overwrite newer data. |
+| `DELETE` | `/meals/:id` | Delete one meal. Safe to repeat. |
+| `GET` | `/meals?from=YYYY-MM-DD&to=YYYY-MM-DD` | This device's meals in a date range, in the same shape as `PUT`. |
+| `DELETE` | `/me` | "Delete my data" in the app: removes the device; the database cascades to its profile, meals and items. Safe to repeat. |
+
+Errors: `400` with a readable message for bad input, `429` when rate-limited, `502` when Gemini fails or returns something unusable.
+
+## How it's put together
+
+```
+src/
+  meals/       POST /meals/parse
+    meals.controller.ts        HTTP only: validate body, call the service
+    meals.service.ts           validates the model's JSON, retries once if it's malformed
+    meal-analyzer.ts           MealAnalyzer interface (the "port")
+    gemini-meal-analyzer.ts    the Gemini implementation: main model, then backup model
+    meal-prompt.ts, meal.schema.ts
+  insights/    POST /insights
+    gemini-insight-writer.ts   InsightWriter interface + Gemini implementation
+    insight.schema.ts
+  sync/        profile + meals backup, DELETE /me
+  database/    PrismaService (pooled connection)
+  common/      x-device-id decorator, zod validation pipe
+prisma/        schema + migrations
 ```
 
-## Compile and run the project
+Each feature is its own Nest module. Controllers only handle HTTP; logic sits in services. The AI providers sit behind small interfaces (`MealAnalyzer`, `InsightWriter`) injected by token, so tests swap in a fake, and switching to another model provider means writing one class.
 
-```bash
-# development
-$ npm run start
+### Decisions worth knowing
 
-# watch mode
-$ npm run start:dev
+- **Gemini with a fallback.** Main model `gemini-3.5-flash`, backup `gemini-3.5-flash-lite`, both set in `.env`. Each gets one short attempt with SDK retries off (6 s for text, 15 s for photos, 8 s for insights), so the app's own timeout is never hit while the SDK quietly retries for a minute. The backup exists because the main model returns 503 "high demand" at busy times.
+- **Never trust the model's output.** Gemini is asked for JSON matching a schema, and the service still validates it with zod. If it's malformed, the service tries once more, then returns a clean 502.
+- **Facts, not numbers, for insights.** The insight endpoint turns the summary into plain sentences ("Protein target reached on 0 of 6 logged days") before asking Gemini, and the prompt forbids claiming a target was met unless the facts say so. Early versions misread raw numbers and praised a user who had missed protein every day.
+- **Rate limits.** 20 requests a minute per IP for parsing and 10 for insights, so a demo can't burn the Gemini free tier. Sync allows 120, since it's frequent and costs no AI quota.
+- **Photos.** Accepted as base64 JPEG/PNG up to about 3 MB. The JSON body limit is raised to 5 MB in `main.ts`. The app already shrinks photos to 1024 px before sending.
+- **Dates are strings.** A meal's `date` is the user's local `YYYY-MM-DD`, stored as text, so a 1 a.m. snack in India never shifts to the previous day in UTC.
+- **Database.** Supabase Postgres. The running server uses the pooled connection (port 6543, PgBouncer); migrations use the direct or session connection (port 5432). Row-level security is on. The API connects as the owner, and nothing else can read the tables.
 
-# production mode
-$ npm run start:prod
+## Running it
+
+Needs Node ≥ 22 and a Postgres database (a free Supabase project works).
+
+```sh
+npm install                 # also generates the Prisma client
+cp .env.example .env        # fill in the values below
+npx prisma migrate deploy --config prisma7.config.ts
+npm run start:dev           # http://localhost:3000, reloads on code changes (not on .env changes)
 ```
 
-## Run tests
+`.env`:
 
-```bash
-# unit tests
-$ npm run test
+| Variable | |
+|---|---|
+| `DATABASE_URL` | Pooled connection string (Supabase: Connect → Transaction pooler, port 6543, add `?pgbouncer=true`) |
+| `DIRECT_URL` | Direct or session connection (port 5432), for migrations |
+| `GEMINI_API_KEY` | From Google AI Studio |
+| `GEMINI_MODEL` | Optional, default `gemini-3.5-flash` |
+| `GEMINI_FALLBACK_MODEL` | Optional, default `gemini-3.5-flash-lite` |
+| `PORT` | Optional, default `3000` |
 
-# e2e tests
-$ npm run test:e2e
+The server starts without a Gemini key. Only the AI endpoints fail, with a clear 502 explaining the key is missing.
 
-# test coverage
-$ npm run test:cov
+Try it:
+
+```sh
+curl -X POST localhost:3000/meals/parse -H 'content-type: application/json' \
+  -d '{"text":"2 chapati and a bowl of dal"}'
 ```
 
-## Deployment
+## Tests and checks
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```sh
+npm test        # Vitest: controllers via supertest, with Gemini and Prisma faked
+npm run lint    # oxlint
+npx tsc --noEmit
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The tests cover input validation, retry on bad model output, the main → backup model fallback, last-write-wins sync, device scoping (one device can never touch another's meals), cascade delete and how insight facts are worded.
 
-## Observability
+## Known limits
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project:
-
-```bash
-$ npm install @nestjs/observe
-```
-
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- **No accounts.** The device id keeps data apart, but anyone holding an id could read that device's data. Real sign-in (phone OTP or Google) is the next step, and it would also let a reinstalled app download its meals back with `GET /meals`.
+- **The Supabase project is in Sydney,** so saves take 3–5 s from India. They run in the background, so users don't wait, but a closer region would be better for production.
