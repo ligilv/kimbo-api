@@ -19,6 +19,7 @@ Every request is JSON. Sync endpoints need an `x-device-id` header (8–64 chars
 | Method | Path | What it does |
 |---|---|---|
 | `POST` | `/meals/parse` | `{ text?, image?: { base64, mimeType } }` → `{ items: [...], clarification: string \| null }`. If the meal is too vague, `items` is empty and `clarification` is one question to ask the user. |
+| `POST` | `/reports/extract` | `{ file: { base64, mimeType: image/jpeg \| image/png \| application/pdf } }` → `{ notAReport, takenOn, values: [...] }`. Each numeric lab value with its range and status; flagged ones also get a plain-language `note`, `why` and helpful `foods`. |
 | `POST` | `/insights` | A summary the app works out (averages, days on target, kcal per meal slot, top food names; no raw meal text) → `{ insight }`, two short sentences. |
 | `PUT` | `/profile` | Create or replace this device's profile (onboarding answers). |
 | `PUT` | `/meals/:id` | Create or replace one meal and its items. Last write wins by the app's `updatedAt`, so an offline queue replaying out of order can't overwrite newer data. |
@@ -38,6 +39,7 @@ src/
     meal-analyzer.ts           MealAnalyzer interface (the "port")
     gemini-meal-analyzer.ts    the Gemini implementation: main model, then backup model
     meal-prompt.ts, meal.schema.ts
+  reports/     POST /reports/extract (lab report photo/PDF → values), same port + Gemini + mock pattern
   insights/    POST /insights
     gemini-insight-writer.ts   InsightWriter interface + Gemini implementation
     insight.schema.ts
@@ -54,8 +56,8 @@ Each feature is its own Nest module. Controllers only handle HTTP; logic sits in
 - **Gemini with a fallback.** Main model `gemini-3.5-flash-lite`, backup `gemini-3.5-flash`, both set in `.env`. Each gets one short attempt with SDK retries off (6 s for text, 15 s for photos, 8 s for insights), so the app's own timeout is never hit while the SDK quietly retries for a minute. Lite is the main model because the free tier allows only 20 requests a day on `gemini-3.5-flash`; flash is the backup for when lite is busy (Google returns 503 "high demand" at peaks).
 - **Never trust the model's output.** Gemini is asked for JSON matching a schema, and the service still validates it with zod. If it's malformed, the service tries once more, then returns a clean 502.
 - **Facts, not numbers, for insights.** The insight endpoint turns the summary into plain sentences ("Protein target reached on 0 of 6 logged days") before asking Gemini, and the prompt forbids claiming a target was met unless the facts say so. Early versions misread raw numbers and praised a user who had missed protein every day.
-- **Rate limits.** 20 requests a minute per IP for parsing and 10 for insights, so a demo can't burn the Gemini free tier. Sync allows 120, since it's frequent and costs no AI quota.
-- **Photos.** Accepted as base64 JPEG/PNG up to about 3 MB. The JSON body limit is raised to 5 MB in `main.ts`. The app already shrinks photos to 1024 px before sending.
+- **Rate limits.** 20 requests a minute per IP for parsing and 10 each for insights and reports, so a demo can't burn the Gemini free tier. Sync allows 120, since it's frequent and costs no AI quota.
+- **Photos.** Accepted as base64 JPEG/PNG up to about 3 MB. Lab reports (JPEG/PNG/PDF) up to about 15 MB. The JSON body limit is raised to 22 MB in `main.ts`. The app already shrinks photos to 1024 px before sending.
 - **Dates are strings.** A meal's `date` is the user's local `YYYY-MM-DD`, stored as text, so a 1 a.m. snack in India never shifts to the previous day in UTC.
 - **Database.** Supabase Postgres. The running server uses the pooled connection (port 6543, PgBouncer); migrations use the direct or session connection (port 5432). Row-level security is on. The API connects as the owner, and nothing else can read the tables.
 
@@ -79,6 +81,7 @@ npm run start:dev           # http://localhost:3000, reloads on code changes (no
 | `GEMINI_API_KEY` | From Google AI Studio |
 | `GEMINI_MODEL` | Optional, default `gemini-3.5-flash-lite` |
 | `GEMINI_FALLBACK_MODEL` | Optional, default `gemini-3.5-flash` |
+| `AI_PROVIDER` | Optional. `mock` makes `/reports/extract` return a canned report (no key needed); default `gemini` |
 | `PORT` | Optional, default `3000` |
 
 The server starts without a Gemini key. Only the AI endpoints fail, with a clear 502 explaining the key is missing.

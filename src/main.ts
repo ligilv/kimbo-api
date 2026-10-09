@@ -4,8 +4,8 @@ import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // Meal photos arrive as base64 JSON (~4 MB max, enforced in meal.schema.ts); Express defaults to 100 kb.
-  app.useBodyParser('json', { limit: '5mb' });
+  // Meal photos and lab reports arrive as base64 JSON (~20 MB max, enforced in report.schema.ts); Express defaults to 100 kb.
+  app.useBodyParser('json', { limit: '22mb' });
   app.enableShutdownHooks();
   await app.listen(process.env.PORT ?? 3000);
 }
