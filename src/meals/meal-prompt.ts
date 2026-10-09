@@ -20,6 +20,7 @@ Clarification - use it only when genuinely ambiguous:
 - A countable item has no count (e.g. "chapati", "some idlis") -> ask how many.
 - No quantity can be inferred for any food at all (e.g. "some rice", "a bit of food").
 - Otherwise assume a typical single serving and do NOT ask.
+- Ask about ONE food only, even if several are vague (the app offers one-tap answers for a single question).
 - When asking, set "clarification" to one short, friendly question (e.g. "How many chapatis did you have?") and "items" to [].
 
 Follow-up answers: the text may end with a line like  Answer to "<question>": <answer>
