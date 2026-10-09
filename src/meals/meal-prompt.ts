@@ -7,6 +7,7 @@ Items:
 - "quantity" is a number > 0 and may be fractional (0.5). "unit" is a short household or metric unit such as
   "piece", "katori", "bowl", "plate", "cup", "glass", "slice", "g", "ml", "tbsp", "tsp".
 - kcal, protein, carbs and fat (grams) are for the WHOLE quantity eaten, not per unit. All are numbers >= 0.
+- "guessed" is true when the amount was not stated and you assumed a typical serving (or estimated it from a photo); false when the user gave the amount.
 
 Indian foods and household portions:
 - 1 katori ≈ 150 ml/g of dal, sabzi, curd or rice. 1 bowl ≈ 1.5 katori. 1 glass ≈ 250 ml. 1 cup ≈ 200 ml (tea/coffee cup ≈ 150 ml).

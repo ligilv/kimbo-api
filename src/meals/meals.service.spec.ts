@@ -17,6 +17,7 @@ const valid = {
       protein: 6,
       carbs: 36,
       fat: 7,
+      guessed: false,
     },
   ],
   clarification: null,

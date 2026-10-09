@@ -30,6 +30,7 @@ describe('POST /meals/parse', () => {
           protein: 6,
           carbs: 36,
           fat: 0.6,
+          guessed: false,
         },
       ],
       clarification: null,

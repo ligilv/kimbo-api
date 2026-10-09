@@ -46,6 +46,7 @@ const mealItemSchema = z.object({
   protein: z.number().nonnegative(),
   carbs: z.number().nonnegative(),
   fat: z.number().nonnegative(),
+  guessed: z.boolean(),
 });
 
 const mealParseShape = z.object({
