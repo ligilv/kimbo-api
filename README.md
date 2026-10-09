@@ -1,12 +1,14 @@
-# Kimbo API
+# Mira API
 
-The backend for [Kimbo](https://github.com/ligilv/Kimbo-app), a chat-style calorie and protein tracker. It does three jobs:
+The backend for [Mira](https://github.com/ligilv/Kimbo-app), a chat-style calorie and protein tracker. It does three jobs:
 
 1. **Understands meals.** Text ("2 chapati and dal") and/or a photo go in; structured food items with calories and macros come out, via Google Gemini.
 2. **Backs up the user's data.** The phone is the main copy; it sends its profile and meals here in the background, stored in Postgres (Supabase).
-3. **Writes Kimbo's take.** A short, personal insight from a 7- or 30-day summary.
+3. **Writes Mira's take.** A short, personal insight from a 7- or 30-day summary.
 
 The Gemini key lives only here, never in the app.
+
+Deployed API: `https://mira-api.onrender.com`. The Render service must be recreated under the name `mira-api` (it was `kimbo-api`) before this URL works.
 
 Built with NestJS 12 (ESM), Prisma 7 + PostgreSQL, zod for validation, `@google/genai`, and Vitest.
 
