@@ -29,7 +29,10 @@ function setup(...outputs: unknown[]) {
     analyze.mockResolvedValueOnce(
       typeof o === 'string' ? o : JSON.stringify(o),
     );
-  return { analyze, service: new MealsService({ analyze }) };
+  return {
+    analyze,
+    service: new MealsService({ analyze, voiceToken: vi.fn() }),
+  };
 }
 
 describe('MealsService', () => {
@@ -75,7 +78,7 @@ describe('MealsService', () => {
     const analyze = vi
       .fn()
       .mockRejectedValue(new Error('secret upstream detail'));
-    const err = await new MealsService({ analyze })
+    const err = await new MealsService({ analyze, voiceToken: vi.fn() })
       .parse({ text: 'x' })
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadGatewayException);

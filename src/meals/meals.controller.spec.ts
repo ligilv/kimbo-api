@@ -7,11 +7,12 @@ import { MealsModule } from './meals.module.js';
 describe('POST /meals/parse', () => {
   let app: INestApplication;
   const analyze = vi.fn<MealAnalyzer['analyze']>();
+  const voiceToken = vi.fn<MealAnalyzer['voiceToken']>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [MealsModule] })
       .overrideProvider(MEAL_ANALYZER)
-      .useValue({ analyze })
+      .useValue({ analyze, voiceToken })
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -63,5 +64,18 @@ describe('POST /meals/parse', () => {
       .post('/meals/parse')
       .send(payload)
       .expect(400);
+  });
+
+  it('hands out a voice token, and hides SDK errors behind a 502', async () => {
+    const token = {
+      token: 'auth_tokens/abc',
+      model: 'gemini-3.5-transcribe-live',
+    };
+    voiceToken.mockResolvedValueOnce(token);
+    await request(app.getHttpServer())
+      .post('/meals/voice-token')
+      .expect(200, token);
+    voiceToken.mockRejectedValueOnce(new Error('quota'));
+    await request(app.getHttpServer()).post('/meals/voice-token').expect(502);
   });
 });

@@ -1,7 +1,7 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MealAnalyzer } from './meal-analyzer.js';
+import type { MealAnalyzer, VoiceToken } from './meal-analyzer.js';
 import { MEAL_SYSTEM_PROMPT } from './meal-prompt.js';
 import { mealParseJsonSchema, type ParseMealRequest } from './meal.schema.js';
 
@@ -16,6 +16,37 @@ const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash';
 const TEXT_ATTEMPT = { timeout: 6_000, maxRetries: 0 };
 // Photos take longer to analyse, so each model gets 15 s (up to ~30 s total with the backup).
 const IMAGE_ATTEMPT = { timeout: 15_000, maxRetries: 0 };
+
+// Live speech-to-text: https://ai.google.dev/gemini-api/docs/live-api/live-transcribe
+const VOICE_MODEL = 'gemini-3.5-transcribe-live';
+
+const FOOD_WORDS = [
+  'roti',
+  'chapati',
+  'paratha',
+  'dal',
+  'rajma',
+  'chole',
+  'paneer',
+  'idli',
+  'dosa',
+  'sambar',
+  'poha',
+  'upma',
+  'khichdi',
+  'biryani',
+  'curd',
+  'dahi',
+  'chaas',
+  'sabzi',
+  'bhindi',
+  'aloo',
+  'thepla',
+  'besan chilla',
+  'sprouts',
+  'katori',
+  'chai',
+];
 
 @Injectable()
 export class GeminiMealAnalyzer implements MealAnalyzer {
@@ -39,6 +70,34 @@ export class GeminiMealAnalyzer implements MealAnalyzer {
       );
       return this.ask(backup, meal);
     }
+  }
+
+  // Ephemeral tokens: https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens
+  // The real key stays here; the app gets a one-use key locked to the
+  // transcriber and these settings, so it can't be used for anything else.
+  async voiceToken(): Promise<VoiceToken> {
+    const now = Date.now();
+    const token = await this.getClient().authTokens.create({
+      config: {
+        uses: 1,
+        newSessionExpireTime: new Date(now + 60_000).toISOString(),
+        expireTime: new Date(now + 2 * 60_000).toISOString(),
+        liveConnectConstraints: {
+          model: VOICE_MODEL,
+          config: {
+            responseModalities: [Modality.TEXT],
+            inputAudioTranscription: {
+              languageCodes: ['en-IN', 'hi-IN'],
+              customVocabulary: FOOD_WORDS,
+            },
+          },
+        },
+        httpOptions: { apiVersion: 'v1alpha' }, // tokens are v1alpha-only for now
+      },
+    });
+    if (!token.name)
+      throw new BadGatewayException('Gemini returned no voice token.');
+    return { token: token.name, model: VOICE_MODEL };
   }
 
   private async ask(

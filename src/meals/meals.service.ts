@@ -5,7 +5,11 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { MEAL_ANALYZER, type MealAnalyzer } from './meal-analyzer.js';
+import {
+  MEAL_ANALYZER,
+  type MealAnalyzer,
+  type VoiceToken,
+} from './meal-analyzer.js';
 import {
   mealParseResultSchema,
   type MealParseResult,
@@ -32,6 +36,16 @@ export class MealsService {
     throw new BadGatewayException(
       'Could not understand the meal analysis. Please try again.',
     );
+  }
+
+  async voiceToken(): Promise<VoiceToken> {
+    try {
+      return await this.analyzer.voiceToken();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error(`Voice token failed: ${(error as Error).message}`);
+      throw new BadGatewayException('Voice is unavailable right now.');
+    }
   }
 
   private async callAnalyzer(meal: ParseMealRequest): Promise<string> {

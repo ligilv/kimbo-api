@@ -6,6 +6,7 @@ import {
   type MealParseResult,
   type ParseMealRequest,
 } from './meal.schema.js';
+import type { VoiceToken } from './meal-analyzer.js';
 import { MealsService } from './meals.service.js';
 
 @Controller('meals')
@@ -19,5 +20,12 @@ export class MealsController {
     @Body(new ZodValidationPipe(parseMealRequestSchema)) body: ParseMealRequest,
   ): Promise<MealParseResult> {
     return this.meals.parse(body);
+  }
+
+  // Shares the 20/minute limit with /parse, so one phone can't mint keys in a loop.
+  @Post('voice-token')
+  @HttpCode(200)
+  voiceToken(): Promise<VoiceToken> {
+    return this.meals.voiceToken();
   }
 }
