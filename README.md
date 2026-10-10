@@ -8,7 +8,7 @@ The backend for [Mira](https://github.com/ligilv/Kimbo-app), a chat-style calori
 
 The Gemini key lives only here, never in the app.
 
-Deployed API: `https://mira-api.onrender.com`. The Render service must be recreated under the name `mira-api` (it was `kimbo-api`) before this URL works.
+Deployed API: `https://kimbo-api.onrender.com` (the Render service keeps its original name).
 
 Built with NestJS 12 (ESM), Prisma 7 + PostgreSQL, zod for validation, `@google/genai`, and Vitest.
 

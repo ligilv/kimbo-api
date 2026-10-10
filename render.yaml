@@ -2,7 +2,7 @@
 # Secrets are entered in the dashboard when prompted, never committed.
 services:
   - type: web
-    name: mira-api
+    name: kimbo-api
     runtime: node
     plan: free # sleeps after 15 min idle; the app pings / on launch to wake it
     region: singapore # nearest to India
